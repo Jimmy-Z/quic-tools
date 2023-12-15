@@ -261,10 +261,10 @@ async fn s2n_client(remote: SocketAddr, remote_name: &str, bind: SocketAddr, bbr
 fn s2n_limits(max_snd_buf: u32) ->s2n_quic::provider::limits::Limits {
 	s2n_quic::provider::limits::Limits::default()
 		// .with_max_idle_timeout(Duration::from_secs(7)).unwrap()
-		// .with_data_window(15_000_000).unwrap() // for 300Mbps over 200ms RTT
-		// .with_bidirectional_local_data_window(15_000_000).unwrap()
-		// .with_bidirectional_remote_data_window(15_000_000).unwrap()
-		// .with_unidirectional_data_window(15_000_000).unwrap()
+		.with_data_window(15_000_000).unwrap() // for 300Mbps over 200ms RTT
+		.with_bidirectional_local_data_window(15_000_000).unwrap()
+		.with_bidirectional_remote_data_window(15_000_000).unwrap()
+		.with_unidirectional_data_window(15_000_000).unwrap()
 		// .with_max_open_local_bidirectional_streams(1024).unwrap()
 		// .with_max_open_local_unidirectional_streams(1024).unwrap()
 		// .with_max_open_remote_bidirectional_streams(1024).unwrap()
