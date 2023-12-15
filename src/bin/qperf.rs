@@ -38,6 +38,9 @@ enum Cmds {
 	S2NServer {
 		#[arg(default_value = "0.0.0.0:2501")]
 		bind: SocketAddr,
+
+		#[arg(short, long, default_value_t = 1048576)]
+		max_snd_buf: u32,
 	},
 	#[command(alias = "qs")]
 	QUINNServer {
@@ -59,6 +62,9 @@ enum Cmds {
 
 		#[arg(short, long, default_value = "0.0.0.0:0")]
 		bind: SocketAddr,
+
+		#[arg(short, long, default_value_t = 1048576)]
+		max_snd_buf: u32,
 	},
 	#[command(alias = "qc")]
 	QUINNClient {
@@ -80,8 +86,8 @@ async fn main() {
 		Cmds::TCPServer { bind } => {
 			tcp_server(*bind).await;
 		}
-		Cmds::S2NServer { bind } => {
-			s2n_server(*bind, args.bbr).await;
+		Cmds::S2NServer { bind, max_snd_buf } => {
+			s2n_server(*bind, args.bbr, *max_snd_buf).await;
 		}
 		Cmds::QUINNServer { bind } => {
 			quinn_server(*bind, args.bbr).await;
@@ -93,8 +99,9 @@ async fn main() {
 			remote,
 			remote_name,
 			bind,
+			max_snd_buf
 		} => {
-			s2n_client(*remote, remote_name, *bind, args.bbr).await;
+			s2n_client(*remote, remote_name, *bind, args.bbr, *max_snd_buf).await;
 		}
 		Cmds::QUINNClient {
 			remote,
@@ -185,11 +192,13 @@ async fn quinn_client(remote: SocketAddr, remote_name: &str, bind: SocketAddr, b
 	read(s).await;
 }
 
-async fn s2n_server(bind: SocketAddr, bbr: bool) {
+async fn s2n_server(bind: SocketAddr, bbr: bool, max_snd_buf: u32) {
 	let builder = s2n_quic::Server::builder()
 		.with_tls((CERT_PEM, KEY_PEM))
 		.unwrap()
 		.with_io(bind)
+		.unwrap()
+		.with_limits(s2n_limits(max_snd_buf))
 		.unwrap();
 	// what's the best practice here?
 	let mut server = if bbr {
@@ -222,11 +231,13 @@ async fn s2n_server(bind: SocketAddr, bbr: bool) {
 	}
 }
 
-async fn s2n_client(remote: SocketAddr, remote_name: &str, bind: SocketAddr, bbr: bool) {
+async fn s2n_client(remote: SocketAddr, remote_name: &str, bind: SocketAddr, bbr: bool, max_snd_buf: u32) {
 	let builder = s2n_quic::Client::builder()
 		.with_tls(CERT_PEM)
 		.unwrap()
 		.with_io(bind)
+		.unwrap()
+		.with_limits(s2n_limits(max_snd_buf))
 		.unwrap();
 	let client = if bbr {
 		builder
@@ -245,6 +256,20 @@ async fn s2n_client(remote: SocketAddr, remote_name: &str, bind: SocketAddr, bbr
 	let s = conn.open_bidirectional_stream().await.unwrap();
 	eprintln!("stream opened, id: {}", s.id());
 	read(s).await;
+}
+
+fn s2n_limits(max_snd_buf: u32) ->s2n_quic::provider::limits::Limits {
+	s2n_quic::provider::limits::Limits::default()
+		// .with_max_idle_timeout(Duration::from_secs(7)).unwrap()
+		// .with_data_window(15_000_000).unwrap() // for 300Mbps over 200ms RTT
+		// .with_bidirectional_local_data_window(15_000_000).unwrap()
+		// .with_bidirectional_remote_data_window(15_000_000).unwrap()
+		// .with_unidirectional_data_window(15_000_000).unwrap()
+		// .with_max_open_local_bidirectional_streams(1024).unwrap()
+		// .with_max_open_local_unidirectional_streams(1024).unwrap()
+		// .with_max_open_remote_bidirectional_streams(1024).unwrap()
+		// .with_max_open_remote_unidirectional_streams(1024).unwrap()
+		.with_max_send_buffer_size(max_snd_buf).unwrap() // default is 512K
 }
 
 const BUF_SIZE: usize = 65536;
